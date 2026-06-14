@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const TaskController = require('../controllers/taskController');
+const roleMiddleware = require('../middleware/roleMiddleware');
 
 /**
  * @swagger
@@ -19,11 +20,21 @@ const TaskController = require('../controllers/taskController');
  *         schema:
  *           type: string
  *         description: Filter by priority
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *         description: Sort by field (due_date, priority, status)
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *         description: Sort order (asc, desc)
  *     responses:
  *       200:
  *         description: List of tasks
  */
-router.get('/', TaskController.getAllTasks);
+router.get('/', roleMiddleware.isCollaboratorOrAbove, TaskController.getAllTasks);
 
 /**
  * @swagger
@@ -43,7 +54,7 @@ router.get('/', TaskController.getAllTasks);
  *       404:
  *         description: Task not found
  */
-router.get('/:id', TaskController.getTaskById);
+router.get('/:id', roleMiddleware.isCollaboratorOrAbove, TaskController.getTaskById);
 
 /**
  * @swagger
@@ -76,9 +87,11 @@ router.get('/:id', TaskController.getTaskById);
  *       201:
  *         description: Task created successfully
  *       400:
- *         description: Title is required
+ *         description: Validation error
+ *       403:
+ *         description: Forbidden
  */
-router.post('/', TaskController.createTask);
+router.post('/', roleMiddleware.isProjectManager, TaskController.createTask);
 
 /**
  * @swagger
@@ -113,7 +126,7 @@ router.post('/', TaskController.createTask);
  *       404:
  *         description: Task not found
  */
-router.put('/:id', TaskController.updateTask);
+router.put('/:id', roleMiddleware.isCollaboratorOrAbove, TaskController.updateTask);
 
 /**
  * @swagger
@@ -133,6 +146,6 @@ router.put('/:id', TaskController.updateTask);
  *       404:
  *         description: Task not found
  */
-router.delete('/:id', TaskController.deleteTask);
+router.delete('/:id', roleMiddleware.isProjectManager, TaskController.deleteTask);
 
 module.exports = router;
