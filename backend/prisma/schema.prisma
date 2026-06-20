@@ -3,12 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Role {
-  id       Int    @id @default(autoincrement()) @db.UnsignedInt
+  id       Int    @id @default(autoincrement())
   roleName String @unique @map("role_name") @db.VarChar(50)
   users    User[]
 
@@ -16,8 +16,8 @@ model Role {
 }
 
 model User {
-  id           Int      @id @default(autoincrement()) @db.UnsignedInt
-  roleId       Int      @map("role_id") @db.UnsignedInt
+  id           Int      @id @default(autoincrement())
+  roleId       Int      @map("role_id")
   fullName     String   @map("full_name") @db.VarChar(100)
   email        String   @unique @db.VarChar(255)
   passwordHash String   @map("password_hash") @db.VarChar(255)
@@ -44,8 +44,8 @@ model User {
 }
 
 model PasswordReset {
-  id         Int      @id @default(autoincrement()) @db.UnsignedInt
-  userId     Int      @map("user_id") @db.UnsignedInt
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
   resetToken String   @map("reset_token") @db.VarChar(255)
   expiresAt  DateTime @map("expires_at")
   used       Boolean  @default(false)
@@ -59,10 +59,10 @@ model PasswordReset {
 }
 
 model Project {
-  id          Int       @id @default(autoincrement()) @db.UnsignedInt
+  id          Int       @id @default(autoincrement())
   projectName String    @map("project_name") @db.VarChar(150)
   description String?   @db.Text
-  createdBy   Int       @map("created_by") @db.UnsignedInt
+  createdBy   Int       @map("created_by")
   startDate   DateTime? @map("start_date") @db.Date
   endDate     DateTime? @map("end_date") @db.Date
   status      String    @default("Active") @db.VarChar(20)
@@ -80,9 +80,9 @@ model Project {
 }
 
 model ProjectMember {
-  id        Int      @id @default(autoincrement()) @db.UnsignedInt
-  projectId Int      @map("project_id") @db.UnsignedInt
-  userId    Int      @map("user_id") @db.UnsignedInt
+  id        Int      @id @default(autoincrement())
+  projectId Int      @map("project_id")
+  userId    Int      @map("user_id")
   joinedAt  DateTime @default(now()) @map("joined_at")
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -95,14 +95,14 @@ model ProjectMember {
 }
 
 model Task {
-  id          Int       @id @default(autoincrement()) @db.UnsignedInt
-  projectId   Int       @map("project_id") @db.UnsignedInt
+  id          Int       @id @default(autoincrement())
+  projectId   Int       @map("project_id")
   title       String    @db.VarChar(200)
   description String?   @db.Text
   priority    String    @default("Medium") @db.VarChar(20)
   status      String    @default("To Do") @db.VarChar(20)
   dueDate     DateTime? @map("due_date") @db.Date
-  createdBy   Int       @map("created_by") @db.UnsignedInt
+  createdBy   Int       @map("created_by")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -122,9 +122,9 @@ model Task {
 }
 
 model TaskAssignment {
-  id         Int      @id @default(autoincrement()) @db.UnsignedInt
-  taskId     Int      @map("task_id") @db.UnsignedInt
-  userId     Int      @map("user_id") @db.UnsignedInt
+  id         Int      @id @default(autoincrement())
+  taskId     Int      @map("task_id")
+  userId     Int      @map("user_id")
   assignedAt DateTime @default(now()) @map("assigned_at")
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -137,9 +137,9 @@ model TaskAssignment {
 }
 
 model Comment {
-  id          Int      @id @default(autoincrement()) @db.UnsignedInt
-  taskId      Int      @map("task_id") @db.UnsignedInt
-  userId      Int      @map("user_id") @db.UnsignedInt
+  id          Int      @id @default(autoincrement())
+  taskId      Int      @map("task_id")
+  userId      Int      @map("user_id")
   commentText String   @map("comment_text") @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
 
@@ -153,9 +153,9 @@ model Comment {
 }
 
 model Attachment {
-  id         Int      @id @default(autoincrement()) @db.UnsignedInt
-  taskId     Int      @map("task_id") @db.UnsignedInt
-  uploadedBy Int      @map("uploaded_by") @db.UnsignedInt
+  id         Int      @id @default(autoincrement())
+  taskId     Int      @map("task_id")
+  uploadedBy Int      @map("uploaded_by")
   fileName   String   @map("file_name") @db.VarChar(255)
   fileUrl    String   @map("file_url") @db.VarChar(500)
   uploadedAt DateTime @default(now()) @map("uploaded_at")
@@ -169,8 +169,8 @@ model Attachment {
 }
 
 model Notification {
-  id        Int      @id @default(autoincrement()) @db.UnsignedInt
-  userId    Int      @map("user_id") @db.UnsignedInt
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
   title     String   @db.VarChar(200)
   message   String   @db.Text
   type      String   @db.VarChar(30)

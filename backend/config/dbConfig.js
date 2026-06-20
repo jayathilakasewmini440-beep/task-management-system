@@ -4,17 +4,16 @@ function parseDatabaseUrl(url) {
   const useSsl = process.env.DB_SSL === 'true' || isRemote;
 
   return {
-    host: parsed.hostname,
-    port: Number(parsed.port) || 3306,
-    user: decodeURIComponent(parsed.username),
-    password: decodeURIComponent(parsed.password),
-    database: parsed.pathname.replace(/^\//, ''),
+    connectionString: url,
     ssl: useSsl ? { rejectUnauthorized: false } : undefined,
   };
 }
 
 function getPoolConfig() {
-  const databaseUrl = process.env.DATABASE_URL || process.env.MYSQL_URL;
+  const databaseUrl =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_PRIVATE_URL;
 
   if (databaseUrl) {
     return parseDatabaseUrl(databaseUrl);
@@ -28,10 +27,10 @@ function getPoolConfig() {
 
   return {
     host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER,
+    port: Number(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    database: process.env.DB_NAME || 'tms_db',
     ssl: useSsl ? { rejectUnauthorized: false } : undefined,
   };
 }
@@ -39,7 +38,8 @@ function getPoolConfig() {
 function hasDatabaseConfig() {
   return Boolean(
     process.env.DATABASE_URL ||
-      process.env.MYSQL_URL ||
+      process.env.POSTGRES_URL ||
+      process.env.DATABASE_PRIVATE_URL ||
       (process.env.DB_HOST && process.env.DB_USER && process.env.DB_NAME)
   );
 }
