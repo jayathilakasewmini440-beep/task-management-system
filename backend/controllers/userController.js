@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
+const sendWelcomeEmail = require('../utils/sendEmail');
 
 function generateTempPassword() {
   return Math.random().toString(36).slice(-8);
@@ -37,10 +38,10 @@ exports.createUser = async (req, res) => {
       [full_name, email, hashedPassword, roleId]
     );
 
-    // TODO: send tempPassword via nodemailer instead of console.log
-    console.log(`Temp password for ${email}: ${tempPassword}`);
+    
+    await sendWelcomeEmail(email, full_name, tempPassword);
 
-    res.status(201).json({ message: 'User created successfully', userId: result.insertId });
+    res.status(201).json({ message: 'User created successfully. Welcome email sent.', userId: result.insertId });
 
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
