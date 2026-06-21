@@ -1,12 +1,7 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
+const sendWelcomeEmail = require('../utils/sendEmail');
 const { createNotification } = require('../services/notificationService');
-
-const ROLE_IDS = {
-  Admin: 1,
-  'Project Manager': 2,
-  Collaborator: 3,
-};
 
 function generateTempPassword() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#';
@@ -21,195 +16,181 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+async function getRoleId(roleName) {
+  const [rows] = await db.promise().query('SELECT id FROM roles WHERE role_name = ?', [roleName]);
+  return rows.length > 0 ? rows[0].id : null;
+}
+
 exports.createUser = async (req, res) => {
-  const { name, email, role } = req.body;
+  try {
+    const { full_name, email, role } = req.body;
 
-  if (!name || !email || !role) {
-    return res.status(400).json({
-      errorCode: 'VALIDATION_ERROR',
-      message: 'Name, email, and role are required',
-    });
-  }
-
-  if (!isValidEmail(email)) {
-    return res.status(400).json({
-      errorCode: 'VALIDATION_ERROR',
-      message: 'Email must be valid',
-    });
-  }
-
-  const roleId = ROLE_IDS[role];
-  if (!roleId) {
-    return res.status(400).json({
-      errorCode: 'VALIDATION_ERROR',
-      message: 'Invalid role',
-    });
-  }
-
-  const tempPassword = generateTempPassword();
-  const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-  db.query(
-    `INSERT INTO users (role_id, full_name, email, password_hash, is_first_login, is_active)
-     VALUES (?, ?, ?, ?, TRUE, TRUE)
-     RETURNING id`,
-    [roleId, name, email, hashedPassword],
-    async (err, result) => {
-      if (err) {
-        if (err.code === '23505') {
-          return res.status(400).json({
-            errorCode: 'VALIDATION_ERROR',
-            message: 'Email already exists',
-          });
-        }
-        return res.status(500).json({
-          errorCode: 'INTERNAL_ERROR',
-          message: err.message,
-        });
-      }
-
-      try {
-        await createNotification(
-          result.insertId,
-          'Welcome to TMS',
-          'Your account was created. Use your temporary password on first login, then reset it.',
-          'admin_update'
-        );
-      } catch (notifyErr) {
-        console.error('User welcome notification error:', notifyErr.message);
-      }
-
-      res.status(201).json({
-        message: 'User created successfully',
-        userId: result.insertId,
-        tempPassword,
+    if (!full_name || !email || !role) {
+      return res.status(400).json({
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Full name, email, and role are required',
       });
     }
-  );
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Email must be valid',
+      });
+    }
+
+    const validRoles = ['Admin', 'Project Manager', 'Collaborator'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Invalid role',
+      });
+    }
+
+    const roleId = await getRoleId(role);
+    if (!roleId) {
+      return res.status(400).json({
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Role not found in database',
+      });
+    }
+
+    const tempPassword = generateTempPassword();
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    const [result] = await db.promise().query(
+      'INSERT INTO users (full_name, email, password_hash, role_id) VALUES (?, ?, ?, ?)',
+      [full_name, email, hashedPassword, roleId]
+    );
+
+    try {
+      await createNotification(
+        result.insertId,
+        'Welcome to TMS',
+        'Your account was created. Use your temporary password on first login, then reset it.',
+        'admin_update'
+      );
+    } catch (notifyErr) {
+      console.error('User welcome notification error:', notifyErr.message);
+    }
+
+    try {
+      await sendWelcomeEmail(email, full_name, tempPassword);
+    } catch (emailErr) {
+      console.error('Welcome email error:', emailErr.message);
+    }
+
+    res.status(201).json({
+      message: 'User created successfully',
+      userId: result.insertId,
+      tempPassword,
+    });
+
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY' || err.code === '23505') {
+      return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Email already exists' });
+    }
+    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+  }
 };
 
-exports.getTeamMembers = (req, res) => {
-  const sql = `
-    SELECT u.id, u.full_name AS name, u.email, r.role_name AS role, u.is_active
-    FROM users u
-    JOIN roles r ON u.role_id = r.id
-    WHERE u.is_active = TRUE
-    ORDER BY u.full_name
-  `;
-
-  db.query(sql, (err, results) => {
-    if (err) {
-      return res.status(500).json({
-        errorCode: 'INTERNAL_ERROR',
-        message: err.message,
-      });
-    }
+exports.getTeamMembers = async (req, res) => {
+  try {
+    const [results] = await db.promise().query(
+      `SELECT u.id, u.full_name AS name, u.email, r.role_name AS role, u.is_active
+       FROM users u
+       JOIN roles r ON u.role_id = r.id
+       WHERE u.is_active = TRUE
+       ORDER BY u.full_name`
+    );
     res.json({ success: true, data: results });
-  });
+  } catch (err) {
+    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+  }
 };
 
-exports.getUsers = (req, res) => {
-  const sql = `
-    SELECT u.id, u.full_name AS name, u.email, r.role_name AS role, u.is_active, u.created_at
-    FROM users u
-    JOIN roles r ON u.role_id = r.id
-    ORDER BY u.id
-  `;
-
-  db.query(sql, (err, results) => {
-    if (err) {
-      return res.status(500).json({
-        errorCode: 'INTERNAL_ERROR',
-        message: err.message,
-      });
-    }
+exports.getUsers = async (req, res) => {
+  try {
+    const [results] = await db.promise().query(
+      `SELECT u.id, u.full_name, u.email, u.is_active, u.created_at, r.role_name 
+       FROM users u 
+       JOIN roles r ON u.role_id = r.id
+       ORDER BY u.id`
+    );
     res.json(results);
-  });
+  } catch (err) {
+    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+  }
 };
 
-exports.updateUser = (req, res) => {
-  const { id } = req.params;
-  const { name, email, role } = req.body;
-  const roleId = ROLE_IDS[role];
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { full_name, email, role } = req.body;
 
-  if (!name || !email || !role) {
-    return res.status(400).json({
-      errorCode: 'VALIDATION_ERROR',
-      message: 'Name, email, and role are required',
-    });
-  }
-
-  if (!isValidEmail(email)) {
-    return res.status(400).json({
-      errorCode: 'VALIDATION_ERROR',
-      message: 'Email must be valid',
-    });
-  }
-
-  if (!roleId) {
-    return res.status(400).json({
-      errorCode: 'VALIDATION_ERROR',
-      message: 'Invalid role',
-    });
-  }
-
-  db.query(
-    'UPDATE users SET full_name = ?, email = ?, role_id = ? WHERE id = ?',
-    [name, email, roleId, id],
-    (err, result) => {
-      if (err) {
-        return res.status(500).json({
-          errorCode: 'INTERNAL_ERROR',
-          message: err.message,
-        });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          errorCode: 'NOT_FOUND',
-          message: 'User not found',
-        });
-      }
-      res.json({ message: 'User updated successfully' });
-    }
-  );
-};
-
-exports.deactivateUser = (req, res) => {
-  const { id } = req.params;
-
-  db.query('UPDATE users SET is_active = FALSE WHERE id = ?', [id], (err, result) => {
-    if (err) {
-      return res.status(500).json({
-        errorCode: 'INTERNAL_ERROR',
-        message: err.message,
+    if (!full_name || !email || !role) {
+      return res.status(400).json({
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Full name, email, and role are required',
       });
     }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Email must be valid',
+      });
+    }
+
+    const roleId = await getRoleId(role);
+    if (!roleId) {
+      return res.status(400).json({
+        errorCode: 'VALIDATION_ERROR',
+        message: 'Invalid role',
+      });
+    }
+
+    const [result] = await db.promise().query(
+      'UPDATE users SET full_name = ?, email = ?, role_id = ? WHERE id = ?',
+      [full_name, email, roleId, id]
+    );
+
     if (result.affectedRows === 0) {
-      return res.status(404).json({
-        errorCode: 'NOT_FOUND',
-        message: 'User not found',
-      });
+      return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
     }
+
+    res.json({ message: 'User updated successfully' });
+  } catch (err) {
+    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+  }
+};
+
+exports.deactivateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await db.promise().query('UPDATE users SET is_active = FALSE WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
+    }
+
     res.json({ message: 'User deactivated successfully' });
-  });
+  } catch (err) {
+    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+  }
 };
 
-exports.activateUser = (req, res) => {
-  const { id } = req.params;
+exports.activateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await db.promise().query('UPDATE users SET is_active = TRUE WHERE id = ?', [id]);
 
-  db.query('UPDATE users SET is_active = TRUE WHERE id = ?', [id], (err, result) => {
-    if (err) {
-      return res.status(500).json({
-        errorCode: 'INTERNAL_ERROR',
-        message: err.message,
-      });
-    }
     if (result.affectedRows === 0) {
-      return res.status(404).json({
-        errorCode: 'NOT_FOUND',
-        message: 'User not found',
-      });
+      return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
     }
+
     res.json({ message: 'User activated successfully' });
-  });
+  } catch (err) {
+    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+  }
 };

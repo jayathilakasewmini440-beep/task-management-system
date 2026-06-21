@@ -18,7 +18,6 @@ exports.login = async (req, res) => {
                    FROM users u
                    JOIN roles r ON u.role_id = r.id
                    WHERE u.email = ?`;
-
     const [results] = await db.promise().query(query, [email]);
 
     if (results.length === 0) {
