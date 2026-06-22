@@ -147,6 +147,9 @@ async function startServer() {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`);
+    console.log(
+      `Email (Resend): ${isEmailConfigured() ? 'configured' : 'NOT configured — set RESEND_API_KEY and EMAIL_FROM'}`
+    );
   });
 }
 
