@@ -46,8 +46,8 @@ export default function Login() {
     <div className="auth-page">
       <div className="auth-card auth-card--animated">
         <div className="auth-card__hero">
-          <span className="navbar__logo auth-card__logo">TMS</span>
-          <h1>Welcome back</h1>
+          <span className="navbar__logo auth-card__logo">T</span>
+          <h1>Welcome to Taskora</h1>
           <p>Sign in to manage tasks, collaborate with your team, and track progress in real time.</p>
           <ul className="auth-features">
             {FEATURES.map((item) => (

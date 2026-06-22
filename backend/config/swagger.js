@@ -4,9 +4,9 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Task Management System API',
+      title: 'Taskora API',
       version: '1.0.0',
-      description: 'API documentation for Task Management System - INTE 21323',
+      description: 'API documentation for Taskora — INTE 21323 Task Management System',
     },
     servers: [
       {

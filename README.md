@@ -1,6 +1,6 @@
-# Task Management System — INTE 21323
+# Taskora — INTE 21323
 
-A full-stack Task Management System (TMS) built for INTE 21323 Group Assignment. Similar to Trello/Jira — teams can create, assign, track, and collaborate on tasks in real time.
+A full-stack task management app (**Taskora**) built for INTE 21323 Group Assignment. Similar to Trello/Jira — teams can create, assign, track, and collaborate on tasks in real time.
 
 ## Live Demo
 

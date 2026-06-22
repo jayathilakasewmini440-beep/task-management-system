@@ -19,9 +19,9 @@ export default function Navbar({ connected }) {
   return (
     <header className="navbar">
       <div className="navbar__brand">
-        <span className="navbar__logo" aria-hidden="true">TMS</span>
+        <span className="navbar__logo" aria-hidden="true">T</span>
         <div>
-          <h1>Task Management System</h1>
+          <h1>Taskora</h1>
           <p>INTE 21323 · Team workspace</p>
         </div>
       </div>

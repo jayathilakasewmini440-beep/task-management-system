@@ -66,7 +66,7 @@ exports.createUser = async (req, res) => {
     try {
       await createNotification(
         result.insertId,
-        'Welcome to TMS',
+        'Welcome to Taskora',
         'Your account was created. Use your temporary password on first login, then reset it.',
         'admin_update'
       );

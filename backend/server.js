@@ -46,7 +46,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Task Management System API is running!' });
+  res.json({ message: 'Taskora API is running!' });
 });
 
 app.get('/api/health', (req, res) => {
