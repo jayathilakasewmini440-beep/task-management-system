@@ -14,4 +14,9 @@ services:
         value: "true"
       - key: SUPABASE_POOLER_HOST
         value: aws-1-ap-southeast-1.pooler.supabase.com
-      # Set DATABASE_URL in Render dashboard (direct Supabase URI — auto-rewritten to pooler on Render)
+      - key: FRONTEND_URL
+        value: https://task-managemnet-system.netlify.app
+      # Set in Render dashboard (secrets):
+      # RESEND_API_KEY=re_xxxx
+      # EMAIL_FROM=Taskora <noreply@vendra.best>
+      # DATABASE_URL from Supabase

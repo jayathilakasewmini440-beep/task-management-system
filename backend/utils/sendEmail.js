@@ -1,10 +1,19 @@
 const { Resend } = require('resend');
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function getClient() {
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
     return null;
   }
-  return new Resend(process.env.RESEND_API_KEY);
+  return new Resend(apiKey);
 }
 
 function getFrontendUrl() {
@@ -16,7 +25,14 @@ function getFrontendUrl() {
 }
 
 function isEmailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return Boolean(
+    process.env.RESEND_API_KEY?.trim() &&
+    process.env.EMAIL_FROM?.trim()
+  );
+}
+
+function getFromAddress() {
+  return process.env.EMAIL_FROM.trim();
 }
 
 async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
@@ -27,19 +43,22 @@ async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
   }
 
   const loginUrl = `${getFrontendUrl()}/login`;
+  const safeName = escapeHtml(fullName);
+  const safeEmail = escapeHtml(toEmail);
+  const safePassword = escapeHtml(temporaryPassword);
 
-  const { error } = await client.emails.send({
-    from: process.env.EMAIL_FROM,
-    to: [toEmail],
+  const { data, error } = await client.emails.send({
+    from: getFromAddress(),
+    to: [toEmail.trim()],
     subject: 'Welcome to Taskora — your account details',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
         <h2>Welcome to Taskora</h2>
-        <p>Hi ${fullName},</p>
+        <p>Hi ${safeName},</p>
         <p>Your administrator created an account for you.</p>
         <div style="background: #f4f6fa; padding: 16px; border-radius: 8px; margin: 16px 0;">
-          <p style="margin: 0 0 8px;"><strong>Email:</strong> ${toEmail}</p>
-          <p style="margin: 0;"><strong>Temporary password:</strong> ${temporaryPassword}</p>
+          <p style="margin: 0 0 8px;"><strong>Email:</strong> ${safeEmail}</p>
+          <p style="margin: 0;"><strong>Temporary password:</strong> ${safePassword}</p>
         </div>
         <p><a href="${loginUrl}" style="background:#1a2230;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Sign in to Taskora</a></p>
         <p style="color:#666;font-size:14px;">You must change your password on first login.</p>
@@ -57,6 +76,8 @@ async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
   if (error) {
     throw new Error(error.message || 'Failed to send welcome email');
   }
+
+  return data;
 }
 
 module.exports = sendWelcomeEmail;
