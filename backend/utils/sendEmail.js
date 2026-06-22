@@ -4,7 +4,7 @@ function getClient() {
   if (!process.env.RESEND_API_KEY) {
     return null;
   }
-  return new Resend(process.env.RESEND_API_KEY);
+  return new Resend(process.env.RESEND_API_KEY.trim());
 }
 
 function getFrontendUrl() {
@@ -16,7 +16,14 @@ function getFrontendUrl() {
 }
 
 function isEmailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return Boolean(
+    process.env.RESEND_API_KEY?.trim() &&
+    process.env.EMAIL_FROM?.trim()
+  );
+}
+
+function getFromAddress() {
+  return process.env.EMAIL_FROM.trim();
 }
 
 async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
@@ -29,7 +36,7 @@ async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
   const loginUrl = `${getFrontendUrl()}/login`;
 
   const { data, error } = await client.emails.send({
-    from: process.env.EMAIL_FROM,
+    from: getFromAddress(),
     to: [toEmail],
     subject: 'Welcome to Taskora — your account details',
     html: `
