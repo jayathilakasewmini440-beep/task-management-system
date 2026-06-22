@@ -204,19 +204,17 @@ const TaskController = {
           }
 
           try {
-            TaskModel.getAssigneeIds(id, async (_, assignees) => {
-              const ids = (assignees || []).map((row) => row.user_id);
-              await notifyUsers(
-                ids.filter((userId) => userId !== req.user.id),
-                'Task status updated',
-                `"${existing.title}" is now "${status}"`,
-                'status_change',
-                { emitTaskUpdate: true, taskId: Number(id) }
-              );
-              emitTaskUpdated(Number(id));
-            });
+            const assignees = await getAssigneeIdsAsync(id);
+            await notifyUsers(
+              recipientsExcept(req.user.id, assignees),
+              'Task status updated',
+              `"${existing.title}" is now "${status}"`,
+              'status_change',
+              { emitTaskUpdate: true, taskId: Number(id) }
+            );
           } catch (notifyErr) {
             console.error('Status update notification error:', notifyErr.message);
+            emitTaskUpdated(Number(id));
           }
 
           return res.status(200).json({ success: true, message: 'Task status updated successfully' });
@@ -258,15 +256,15 @@ const TaskController = {
         }
 
         try {
-          let previousAssigneeIds = [];
           if (Array.isArray(assignee_ids)) {
-            previousAssigneeIds = await getAssigneeIdsAsync(id);
+            const previousAssigneeIds = await getAssigneeIdsAsync(id);
             await syncAssignments(id, assignee_ids);
 
             const newlyAssigned = recipientsExcept(
               req.user.id,
               assignee_ids.filter((userId) => !previousAssigneeIds.includes(Number(userId)))
             );
+            const statusChanged = status && status !== existing.status;
 
             if (newlyAssigned.length) {
               await notifyUsers(
@@ -274,9 +272,11 @@ const TaskController = {
                 'New task assigned',
                 `You were assigned to "${title}"`,
                 'assignment',
-                { emitTaskUpdate: true, taskId: Number(id) }
+                { emitTaskUpdate: !statusChanged, taskId: Number(id) }
               );
-            } else if (status && status !== existing.status) {
+            }
+
+            if (statusChanged) {
               const assignees = await getAssigneeIdsAsync(id);
               await notifyUsers(
                 recipientsExcept(req.user.id, assignees),
@@ -285,7 +285,7 @@ const TaskController = {
                 'status_change',
                 { emitTaskUpdate: true, taskId: Number(id) }
               );
-            } else {
+            } else if (!newlyAssigned.length) {
               emitTaskUpdated(Number(id));
             }
           } else if (status && status !== existing.status) {
