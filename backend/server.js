@@ -9,6 +9,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const db = require('./config/db');
 const { hasDatabaseConfig } = require('./config/dbConfig');
+const { isEmailConfigured } = require('./utils/sendEmail');
 const { initSocket } = require('./services/socketService');
 const { notifyUsers } = require('./services/notificationService');
 const authRoutes = require('./routes/authRoutes');
@@ -71,6 +72,7 @@ app.get('/api/health', (req, res) => {
     res.json({
       status: 'ok',
       database: 'connected',
+      email: isEmailConfigured() ? 'configured' : 'not_configured',
       connection: db.getActiveConfigLabel(),
       message: 'API and database are healthy',
     });

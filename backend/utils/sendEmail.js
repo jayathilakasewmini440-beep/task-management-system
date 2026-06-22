@@ -28,7 +28,7 @@ async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
 
   const loginUrl = `${getFrontendUrl()}/login`;
 
-  const { error } = await client.emails.send({
+  const { data, error } = await client.emails.send({
     from: process.env.EMAIL_FROM,
     to: [toEmail],
     subject: 'Welcome to Taskora — your account details',
@@ -57,6 +57,8 @@ async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
   if (error) {
     throw new Error(error.message || 'Failed to send welcome email');
   }
+
+  return data;
 }
 
 module.exports = sendWelcomeEmail;

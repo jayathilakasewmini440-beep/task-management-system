@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
-const sendWelcomeEmail = require('../utils/sendEmail');
+const { sendWelcomeEmail, isEmailConfigured } = require('../utils/sendEmail');
 const { createNotification } = require('../services/notificationService');
 
 function generateTempPassword() {
@@ -19,6 +19,11 @@ function isValidEmail(email) {
 async function getRoleId(roleName) {
   const [rows] = await db.promise().query('SELECT id FROM roles WHERE role_name = ?', [roleName]);
   return rows.length > 0 ? rows[0].id : null;
+}
+
+async function rollbackNewUser(userId) {
+  await db.promise().query('DELETE FROM notifications WHERE user_id = ?', [userId]);
+  await db.promise().query('DELETE FROM users WHERE id = ?', [userId]);
 }
 
 exports.createUser = async (req, res) => {
@@ -56,6 +61,14 @@ exports.createUser = async (req, res) => {
       });
     }
 
+    if (!isEmailConfigured()) {
+      return res.status(503).json({
+        errorCode: 'EMAIL_NOT_CONFIGURED',
+        message:
+          'Email is not configured on the server. Add RESEND_API_KEY and EMAIL_FROM on Render, then redeploy.',
+      });
+    }
+
     const tempPassword = generateTempPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
@@ -67,20 +80,25 @@ exports.createUser = async (req, res) => {
     const userId = rows[0]?.id;
 
     try {
+      await sendWelcomeEmail(email, full_name, tempPassword);
+    } catch (emailErr) {
+      console.error('Welcome email error:', emailErr.message);
+      await rollbackNewUser(userId);
+      return res.status(502).json({
+        errorCode: 'EMAIL_SEND_FAILED',
+        message: `Could not send welcome email to ${email}. ${emailErr.message}`,
+      });
+    }
+
+    try {
       await createNotification(
         userId,
         'Welcome to Taskora',
-        'Your account was created. Use your temporary password on first login, then reset it.',
+        'Your account was created. Check your email for login details.',
         'admin_update'
       );
     } catch (notifyErr) {
       console.error('User welcome notification error:', notifyErr.message);
-    }
-
-    try {
-      await sendWelcomeEmail(email, full_name, tempPassword);
-    } catch (emailErr) {
-      console.error('Welcome email error:', emailErr.message);
     }
 
     res.status(201).json({
@@ -129,7 +147,8 @@ exports.getUsers = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { full_name, email, role } = req.body;
+    const full_name = req.body.full_name || req.body.name;
+    const { email, role } = req.body;
 
     if (!full_name || !email || !role) {
       return res.status(400).json({

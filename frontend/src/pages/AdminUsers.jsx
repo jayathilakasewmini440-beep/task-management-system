@@ -64,9 +64,7 @@ export default function AdminUsers() {
         setMessage('User updated successfully.');
       } else {
         const result = await api.createUser(form);
-        setMessage(
-          `User created. Temporary password: ${result.tempPassword} (share securely with the user).`
-        );
+        setMessage(result.message || `User created. Welcome email sent to ${form.email}.`);
       }
       resetForm();
       await loadUsers();
