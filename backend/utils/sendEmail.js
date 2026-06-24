@@ -158,7 +158,13 @@ async function sendWelcomeEmail(toEmail, fullName, temporaryPassword) {
   });
 
   if (error) {
-    throw new Error(error.message || 'Failed to send welcome email');
+    const detail = error.message || 'Failed to send welcome email';
+    if (/only send.*yourself|testing emails|verify a domain|not authorized/i.test(detail)) {
+      throw new Error(
+        `${detail} Add and verify vendra.best in Resend, or verify this recipient email in Resend.`
+      );
+    }
+    throw new Error(detail);
   }
 
   return data;
@@ -211,7 +217,13 @@ async function sendForgotPasswordEmail(toEmail, fullName, temporaryPassword) {
   });
 
   if (error) {
-    throw new Error(error.message || 'Failed to send password reset email');
+    const detail = error.message || 'Failed to send password reset email';
+    if (/only send.*yourself|testing emails|verify a domain|not authorized/i.test(detail)) {
+      throw new Error(
+        `${detail} Add and verify vendra.best in Resend, or verify this recipient email in Resend.`
+      );
+    }
+    throw new Error(detail);
   }
 
   return data;
