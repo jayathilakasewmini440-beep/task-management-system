@@ -347,7 +347,6 @@ h3,
   color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 500;
-  border-left: 3px solid transparent;
   transition: var(--transition);
 }
 
@@ -359,7 +358,6 @@ h3,
 .sidebar__link.is-active {
   background: var(--primary-light);
   color: var(--primary);
-  border-left-color: var(--primary);
   font-weight: 600;
 }
 
@@ -638,6 +636,7 @@ h3,
   align-items: center;
   justify-content: center;
   gap: 6px;
+  white-space: nowrap;
 }
 
 .btn--primary {
@@ -1641,18 +1640,8 @@ textarea:focus,
 }
 
 .task-card__accent {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--primary);
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  display: none;
 }
-
-.task-card--low .task-card__accent { background: var(--low); }
-.task-card--medium .task-card__accent { background: var(--med); }
-.task-card--high .task-card__accent { background: var(--high); }
 
 .task-card:hover {
   transform: translateY(-2px);
@@ -1848,8 +1837,8 @@ textarea:focus,
   width: 100%;
   max-width: 36px;
   min-height: 8px;
-  border-radius: 8px 8px 4px 4px;
-  background: linear-gradient(180deg, var(--secondary), var(--primary));
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, var(--brand), var(--brand-h));
   transition: height 0.4s var(--ease);
 }
 
@@ -2172,11 +2161,17 @@ textarea:focus,
   min-height: 180px;
   padding: 18px;
   border-radius: var(--radius-lg);
-  color: #fff;
+  background: var(--card);
+  color: var(--text);
   text-decoration: none;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-card);
   transition: var(--transition);
 }
+
+/* Theme-coordinated project accents (small color tag, not a full fill) */
+.project-card.gradient-blue { --proj-accent: #3f6ea5; }
+.project-card.gradient-teal { --proj-accent: #2f9e8f; }
+.project-card.gradient-purple { --proj-accent: var(--brand); }
 
 .project-card:hover {
   transform: translateY(-3px);
@@ -2186,12 +2181,25 @@ textarea:focus,
 .project-card h3 {
   font-family: var(--font-headline);
   font-size: 1.05rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.project-card h3::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--proj-accent, var(--brand));
+  flex-shrink: 0;
 }
 
 .project-card p {
   flex: 1;
   font-size: 0.84rem;
-  opacity: 0.92;
+  color: var(--text-muted);
   line-height: 1.45;
 }
 
@@ -2202,25 +2210,27 @@ textarea:focus,
   justify-content: space-between;
   gap: 8px;
   font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .project-card__status {
   padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--text-muted);
   font-weight: 600;
 }
 
 .project-card__progress {
   height: 4px;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--track);
   border-radius: 999px;
   overflow: hidden;
 }
 
 .project-card__bar {
   height: 100%;
-  background: #fff;
+  background: var(--proj-accent, var(--brand));
   border-radius: inherit;
 }
 
@@ -2269,7 +2279,7 @@ textarea:focus,
 
 .priority-badge {
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -2760,6 +2770,11 @@ textarea:focus,
   display: block;
 }
 
+/* Match swatches to the project-card accent colors */
+.project-modal__theme-swatch.gradient-blue { background: #3f6ea5; }
+.project-modal__theme-swatch.gradient-teal { background: #2f9e8f; }
+.project-modal__theme-swatch.gradient-purple { background: var(--brand); }
+
 .project-modal__footer {
   display: flex;
   justify-content: flex-end;
@@ -2875,9 +2890,9 @@ tr:last-child td {
 }
 
 .table-select {
-  padding: 5px 8px;
+  padding: 5px 10px;
   font-size: 0.82rem;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
 
@@ -3312,13 +3327,6 @@ tr:last-child td {
   font-size: 0.85rem;
 }
 
-.toast--assignment {
-  border-left: 3px solid var(--primary);
-}
-
-.toast--deadline {
-  border-left: 3px solid var(--warning);
-}
 
 /* ─── Loading & skeleton ─── */
 
