@@ -1,5 +1,4 @@
 const dotenv = require('dotenv');
-
 dotenv.config();
 
 const express = require('express');
@@ -9,8 +8,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const db = require('./config/db');
 const { hasDatabaseConfig } = require('./config/dbConfig');
-const { isEmailConfigured } = require('./utils/sendEmail');
-const { initSocket } = require('./services/socketService');
+const socketService = require('./services/socketService');
 const { notifyUsers } = require('./services/notificationService');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -18,6 +16,7 @@ const taskRoutes = require('./routes/taskRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const attachmentRoutes = require('./routes/attachmentRoutes');
 
 const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
   .split(',')
@@ -27,7 +26,7 @@ const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
 const app = express();
 const server = http.createServer(app);
 
-initSocket(server, allowedOrigins);
+socketService.init(server);
 
 app.use(
   cors({
@@ -50,9 +49,10 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/attachments', attachmentRoutes);
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Taskora API is running!' });
+  res.json({ message: 'Task Management System API is running!' });
 });
 
 app.get('/api/health', async (req, res) => {
@@ -68,7 +68,6 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'ok',
       database: 'connected',
-      email: isEmailConfigured() ? 'configured' : 'not_configured',
       connection: db.getActiveConfigLabel(),
       message: 'API and database are healthy',
     });
@@ -186,9 +185,6 @@ async function startServer() {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`);
-    console.log(
-      `Email (Resend): ${isEmailConfigured() ? 'configured' : 'NOT configured — set RESEND_API_KEY and EMAIL_FROM'}`
-    );
   });
 }
 
