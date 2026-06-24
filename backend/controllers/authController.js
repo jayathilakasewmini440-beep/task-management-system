@@ -124,7 +124,7 @@ exports.forgotPassword = async (req, res) => {
       console.error('Forgot password email error:', emailErr);
       return res.status(503).json({
         errorCode: 'EMAIL_SEND_FAILED',
-        message: 'Could not send the reset email. Please try again later or contact your administrator.',
+        message: emailErr.message || 'Could not send the reset email. Please try again later or contact your administrator.',
       });
     }
 

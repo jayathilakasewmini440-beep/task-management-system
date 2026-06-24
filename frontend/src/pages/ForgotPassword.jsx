@@ -64,7 +64,8 @@ export default function ForgotPassword() {
               <li>You&apos;ll be asked to choose a new password right away.</li>
             </ol>
             <p className="auth-hint auth-hint--box">
-              No email? Check spam/junk, confirm you used your Taskora account email, and ensure email is configured on the server.
+              No email? Check spam/junk. If you saw a red error above, Resend may not be configured on Render yet.
+              Gmail addresses need the domain <strong>vendra.best</strong> verified in Resend.
             </p>
             <Link to="/login" className="btn btn--primary btn--full">
               Back to sign in
