@@ -144,6 +144,15 @@ const TaskModel = {
     const sql = `SELECT user_id FROM task_assignments WHERE task_id = ?`;
     db.query(sql, [taskId], callback);
   },
+
+  // BE-9: return the subset of the given ids that are existing, active users.
+  // The caller compares against the requested ids to reject unknown assignees.
+  findActiveUserIds: (ids, callback) => {
+    if (!Array.isArray(ids) || ids.length === 0) return callback(null, []);
+    const placeholders = ids.map(() => '?').join(', ');
+    const sql = `SELECT id FROM users WHERE is_active = TRUE AND id IN (${placeholders})`;
+    db.query(sql, ids, callback);
+  },
 };
 
 module.exports = TaskModel;

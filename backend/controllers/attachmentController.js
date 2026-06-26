@@ -1,9 +1,6 @@
 const db = require('../config/db');
 const { canAccessTask } = require('../utils/taskAccess');
-
-const errorResponse = (res, statusCode, errorCode, message, description = null) => {
-  return res.status(statusCode).json({ errorCode, message, description });
-};
+const { errorResponse, validationError } = require('../utils/errors');
 
 const AttachmentController = {
   getAttachmentsByTask: async (req, res) => {
@@ -49,11 +46,11 @@ const AttachmentController = {
     const file = req.file;
 
     if (!taskId || Number.isNaN(taskId)) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Invalid task ID', 'task_id is required');
+      return validationError(res, [{ field: 'task_id', message: 'A valid task_id is required' }]);
     }
 
     if (!file) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'No file uploaded', 'A file is required');
+      return validationError(res, [{ field: 'file', message: 'A file is required' }]);
     }
 
     // RC-1 (BE-5, write side): a Collaborator may only attach files to tasks they own/are assigned to.
@@ -145,13 +142,11 @@ const AttachmentController = {
     const uploaded_by = req.user.id;
 
     if (!task_id || !file_name || !file_url) {
-      return errorResponse(
-        res,
-        400,
-        'VALIDATION_ERROR',
-        'Missing required fields',
-        'task_id, file_name and file_url are required'
-      );
+      const errors = [];
+      if (!task_id) errors.push({ field: 'task_id', message: 'task_id is required' });
+      if (!file_name) errors.push({ field: 'file_name', message: 'file_name is required' });
+      if (!file_url) errors.push({ field: 'file_url', message: 'file_url is required' });
+      return validationError(res, errors, 'Missing required fields');
     }
 
     // RC-1 (BE-5, write side): only members of the owning task may attach files.

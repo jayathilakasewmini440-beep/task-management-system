@@ -1,6 +1,6 @@
 const CommentModel = require('../models/commentModel');
 const TaskModel = require('../models/taskModel');
-const { errorResponse } = require('../utils/errors');
+const { errorResponse, validationError } = require('../utils/errors');
 const { canAccessTask } = require('../utils/taskAccess');
 const { sanitizeText } = require('../utils/sanitize');
 const { notifyUsers } = require('../services/notificationService');
@@ -39,11 +39,11 @@ const CommentController = {
     const { task_id, content } = req.body;
 
     if (!content || !content.trim()) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Comment content is required');
+      return validationError(res, [{ field: 'content', message: 'Comment content is required' }]);
     }
 
     if (!task_id) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Task ID is required');
+      return validationError(res, [{ field: 'task_id', message: 'Task ID is required' }]);
     }
 
     // RC-1: a Collaborator may only comment on tasks they own/are assigned to.

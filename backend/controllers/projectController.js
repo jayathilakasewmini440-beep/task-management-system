@@ -1,13 +1,6 @@
 const ProjectModel = require('../models/projectModel');
 const { sanitizeText } = require('../utils/sanitize');
-
-const errorResponse = (res, statusCode, errorCode, message, description = null) => {
-  return res.status(statusCode).json({
-    errorCode,
-    message,
-    description
-  });
-};
+const { errorResponse, validationError } = require('../utils/errors');
 
 const ProjectController = {
 
@@ -73,7 +66,7 @@ const ProjectController = {
     const { project_name, description } = req.body;
 
     if (!project_name || !String(project_name).trim()) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Project name is required');
+      return validationError(res, [{ field: 'project_name', message: 'Project name is required' }]);
     }
 
     const projectData = {

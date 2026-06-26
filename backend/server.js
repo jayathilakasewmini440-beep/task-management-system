@@ -149,7 +149,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({
     errorCode: 'INTERNAL_ERROR',
     message: 'Internal server error',
-    description: err.message,
+    // BE-10: don't leak internals in production.
+    description: process.env.NODE_ENV === 'production' ? null : err.message,
   });
 });
 
