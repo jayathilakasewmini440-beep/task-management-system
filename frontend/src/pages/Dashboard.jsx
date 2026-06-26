@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { api } from '../api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useRole } from '../context/AuthContext';
 import StatCard from '../components/StatCard';
 import ProductivityChart from '../components/ProductivityChart';
 import ProjectHealthCard from '../components/ProjectHealthCard';
@@ -13,6 +13,7 @@ import { FolderSolidIcon, ActiveSolidIcon, CheckCircleSolidIcon, ClipboardSolidI
 
 export default function Dashboard() {
   const { mustResetPassword, user } = useAuth();
+  const { canManageTasks } = useRole();
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
@@ -58,6 +59,12 @@ export default function Dashboard() {
     done: tasks.filter((t) => t.status === 'Completed').length,
   }), [tasks]);
 
+  const projectMap = useMemo(() => {
+    const map = {};
+    projects.forEach((p) => { map[p.id] = p.project_name || p.name; });
+    return map;
+  }, [projects]);
+
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -98,10 +105,17 @@ export default function Dashboard() {
           <RecentProjects projects={projects} />
 
           <div className="bento-grid">
-            <ProductivityChart tasks={tasks} />
-            <UpcomingTasks tasks={tasks} onOpenTask={setSelectedTask} />
-            <ProjectHealthCard tasks={tasks} />
-            <TeamWorkload tasks={tasks} users={users} />
+            <ProductivityChart
+              tasks={tasks}
+              title={canManageTasks ? 'Team Productivity' : 'My Activity'}
+              subtitle={canManageTasks ? 'Tasks created by day' : 'Your task activity by day'}
+            />
+            <UpcomingTasks tasks={tasks} onOpenTask={setSelectedTask} projectMap={projectMap} />
+            <ProjectHealthCard
+              tasks={tasks}
+              subtitle={canManageTasks ? 'Across your workspace' : 'Your assigned tasks'}
+            />
+            {canManageTasks && <TeamWorkload tasks={tasks} users={users} />}
           </div>
         </>
       )}
