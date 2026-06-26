@@ -28,8 +28,8 @@ export default function AllTasks() {
     setSearchParams(next, { replace: true });
   };
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const [tasksRes, projectsRes] = await Promise.all([
@@ -41,7 +41,7 @@ export default function AllTasks() {
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -50,7 +50,8 @@ export default function AllTasks() {
   }, [loadData]);
 
   useEffect(() => {
-    const onTasksChanged = () => loadData();
+    // Background sync (no skeleton) when tasks change elsewhere or via socket.
+    const onTasksChanged = () => loadData({ silent: true });
     window.addEventListener('tms:tasks-changed', onTasksChanged);
     return () => window.removeEventListener('tms:tasks-changed', onTasksChanged);
   }, [loadData]);
@@ -73,6 +74,14 @@ export default function AllTasks() {
   const displayedTasks = filters.filtered;
 
   const handleStatusChange = async (task, status) => {
+    if (task.status === status) return;
+
+    // Optimistic: move the card immediately, sync in the background (no reload/skeleton).
+    const previousStatus = task.status;
+    setTasks((prev) =>
+      prev.map((item) => (item.id === task.id ? { ...item, status } : item))
+    );
+
     try {
       if (canManageTasks) {
         await api.updateTask(task.id, {
@@ -88,9 +97,11 @@ export default function AllTasks() {
       } else {
         await api.updateTask(task.id, { status });
       }
-      await loadData();
       window.dispatchEvent(new Event('tms:tasks-changed'));
     } catch (err) {
+      setTasks((prev) =>
+        prev.map((item) => (item.id === task.id ? { ...item, status: previousStatus } : item))
+      );
       setError(err.message);
     }
   };
