@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, warmApiHealth } from '../api';
 import { useAuth } from '../context/AuthContext';
 import AuthBackground from '../components/AuthBackground';
 import ThemeToggle from '../components/ThemeToggle';
@@ -19,6 +19,10 @@ export default function Login() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const rememberedAuth = getRememberedAuth();
+
+  useEffect(() => {
+    warmApiHealth();
+  }, []);
 
   useEffect(() => {
     const validAuth = getValidStoredAuth();
@@ -47,12 +51,20 @@ export default function Login() {
         navigate('/');
       }
     } catch (err) {
+      const isNetworkError =
+        err.message === 'Failed to fetch' ||
+        err.name === 'TypeError' ||
+        err.message?.includes('NetworkError');
       const message =
-        err.code === 'DATABASE_UNAVAILABLE' || err.status === 503
-          ? 'Backend database is offline. Restart the backend (port 5000) and wait for "PostgreSQL connected" in the terminal.'
-          : err.message === 'Invalid email or password'
-            ? 'Invalid email or password. If you used Forgot password recently, sign in with the temporary password from your email.'
-            : err.message;
+        err.code === 'REQUEST_TIMEOUT'
+          ? 'The server is waking up (free Render plan). Wait 30–60 seconds and try again, or refresh the page first.'
+          : isNetworkError
+            ? 'Cannot reach the API. Refresh the page and try again. If it persists, use https://task-management-system-pi-five.vercel.app/login.'
+            : err.code === 'DATABASE_UNAVAILABLE' || err.status === 503
+              ? 'Backend database is offline. Restart the backend (port 5000) and wait for "PostgreSQL connected" in the terminal.'
+              : err.message === 'Invalid email or password'
+                ? 'Invalid email or password. If you used Forgot password recently, sign in with the temporary password from your email.'
+                : err.message;
       setError(message);
       setFieldErrors(fieldErrorMap(err)); // FE-5
     } finally {

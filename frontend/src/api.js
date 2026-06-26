@@ -1,6 +1,30 @@
 import { clearStoredAuth, getValidStoredAuth } from './utils/authStorage';
 import { API_BASE } from './config/apiConfig';
 
+const DEFAULT_TIMEOUT_MS = 45_000;
+
+function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(url, { ...options, signal: controller.signal })
+    .catch((err) => {
+      if (err.name === 'AbortError') {
+        const error = new Error('The server is taking too long to respond. Try again in a moment.');
+        error.code = 'REQUEST_TIMEOUT';
+        throw error;
+      }
+      throw err;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+/** Ping API on production so Render free tier can wake before the user submits login. */
+export function warmApiHealth() {
+  if (!import.meta.env.PROD) return;
+  fetchWithTimeout(`${API_BASE}/health`, {}, 20_000).catch(() => {});
+}
+
 function getStoredAuth() {
   return getValidStoredAuth();
 }
@@ -54,11 +78,11 @@ async function handleResponse(response) {
 
 export const api = {
   login(email, password) {
-    return fetch(`${API_BASE}/auth/login`, {
+    return fetchWithTimeout(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
-    }).then(handleResponse);
+    }, 60_000).then(handleResponse);
   },
 
   forgotPassword(identifier) {
