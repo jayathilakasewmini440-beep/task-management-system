@@ -14,6 +14,9 @@ function createNotification(userId, title, message, type = 'info', meta = {}) {
 
         const payload = {
           id: result.insertId,
+          // Contract: every socket notification carries recipientId (target user
+          // id) so the client can drop payloads not meant for it (FE-1).
+          recipientId: normalizedUserId,
           userId: normalizedUserId,
           title,
           message,

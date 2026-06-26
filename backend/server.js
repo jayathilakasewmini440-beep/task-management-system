@@ -10,6 +10,7 @@ if (!process.env.JWT_SECRET) {
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const http = require('http');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
@@ -39,7 +40,18 @@ const server = http.createServer(app);
 // real client IP from X-Forwarded-For rather than the proxy's address.
 app.set('trust proxy', 1);
 
-socketService.init(server);
+socketService.init(server, { allowedOrigins });
+
+// BE-7: security headers. CSP is disabled because this is a JSON API and Swagger
+// UI (/api-docs) needs inline assets; the remaining helmet headers (HSTS,
+// nosniff, frameguard, etc.) still apply. CORP is set to cross-origin so the
+// separate frontend origin can consume the API.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 app.use(
   cors({
