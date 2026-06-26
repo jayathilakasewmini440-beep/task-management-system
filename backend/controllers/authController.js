@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-const { PASSWORD_REGEX } = require('../utils/errors');
+const { PASSWORD_REGEX, validationError, internalError } = require('../utils/errors');
 const generateTempPassword = require('../utils/generateTempPassword');
 const { sendForgotPasswordEmail, isEmailConfigured } = require('../utils/sendEmail');
 
@@ -14,10 +14,10 @@ exports.login = async (req, res) => {
     const password = req.body.password;
 
     if (!email || !password) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Email and password are required',
-      });
+      const errors = [];
+      if (!email) errors.push({ field: 'email', message: 'Email is required' });
+      if (!password) errors.push({ field: 'password', message: 'Password is required' });
+      return validationError(res, errors, 'Email and password are required');
     }
 
     const query = `SELECT u.*, r.role_name
@@ -68,12 +68,7 @@ exports.login = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({
-      errorCode: 'INTERNAL_ERROR',
-      message: 'Login failed',
-      description: err.message,
-    });
+    return internalError(res, err, 'Login failed');
   }
 };
 
@@ -82,10 +77,7 @@ exports.forgotPassword = async (req, res) => {
     const identifier = String(req.body.email || req.body.username || '').trim();
 
     if (!identifier) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Work email or name is required',
-      });
+      return validationError(res, [{ field: 'email', message: 'Work email or name is required' }]);
     }
 
     if (!isEmailConfigured()) {
@@ -111,6 +103,17 @@ exports.forgotPassword = async (req, res) => {
     }
 
     const user = rows[0];
+
+    // BE-1: a public, unauthenticated reset must never resurrect an account an
+    // admin has deactivated. Skip silently (same generic response as "no match")
+    // so the endpoint still doesn't reveal whether the account exists.
+    if (!user.is_active) {
+      return res.json({
+        success: true,
+        message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+      });
+    }
+
     const temporaryPassword = generateTempPassword();
 
     try {
@@ -125,7 +128,7 @@ exports.forgotPassword = async (req, res) => {
 
     const hashed = await bcrypt.hash(temporaryPassword, 10);
     await db.promise().query(
-      'UPDATE users SET password_hash = ?, is_first_login = TRUE, is_active = TRUE WHERE id = ?',
+      'UPDATE users SET password_hash = ?, is_first_login = TRUE WHERE id = ?',
       [hashed, user.id]
     );
 
@@ -134,12 +137,7 @@ exports.forgotPassword = async (req, res) => {
       message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
     });
   } catch (err) {
-    console.error('Forgot password error:', err);
-    res.status(500).json({
-      errorCode: 'INTERNAL_ERROR',
-      message: 'Password reset request failed',
-      description: err.message,
-    });
+    return internalError(res, err, 'Password reset request failed');
   }
 };
 
@@ -149,10 +147,9 @@ exports.resetPassword = async (req, res) => {
     const userId = req.user.id;
 
     if (!newPassword || !PASSWORD_REGEX.test(newPassword)) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Password must be at least 8 characters and include upper, lower, and a number',
-      });
+      return validationError(res, [
+        { field: 'newPassword', message: 'Password must be at least 8 characters and include upper, lower, a number, and a symbol' },
+      ]);
     }
 
     const hashed = await bcrypt.hash(newPassword, 10);
@@ -163,11 +160,6 @@ exports.resetPassword = async (req, res) => {
 
     res.json({ message: 'Password updated successfully' });
   } catch (err) {
-    console.error('Reset password error:', err);
-    res.status(500).json({
-      errorCode: 'INTERNAL_ERROR',
-      message: 'Password reset failed',
-      description: err.message,
-    });
+    return internalError(res, err, 'Password reset failed');
   }
 };

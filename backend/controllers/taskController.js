@@ -1,5 +1,6 @@
 const TaskModel = require('../models/taskModel');
-const { errorResponse } = require('../utils/errors');
+const { errorResponse, validationError } = require('../utils/errors');
+const { sanitizeText } = require('../utils/sanitize');
 const { notifyUsers } = require('../services/notificationService');
 const { emitTaskUpdated } = require('../services/socketService');
 
@@ -11,6 +12,9 @@ function validateDueDate(dueDate) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) {
+    return 'Due date is invalid'; // BE-13: reject malformed dates ("garbage")
+  }
   if (due < today) {
     return 'Due date cannot be in the past';
   }
@@ -41,6 +45,58 @@ async function syncAssignments(taskId, assigneeIds = []) {
 function recipientsExcept(actorId, userIds = []) {
   const actor = Number(actorId);
   return [...new Set(userIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id !== actor))];
+}
+
+// BE-9: resolve which requested assignee ids are not valid active users.
+// Resolves { badFormat, invalid[] }; rejects only on a DB error.
+function checkAssignees(assigneeIds) {
+  return new Promise((resolve, reject) => {
+    const numeric = assigneeIds.map((x) => Number(x));
+    if (numeric.some((n) => !Number.isInteger(n) || n <= 0)) {
+      return resolve({ badFormat: true, invalid: [] });
+    }
+    TaskModel.findActiveUserIds(numeric, (err, rows) => {
+      if (err) return reject(err);
+      const validSet = new Set((rows || []).map((r) => Number(r.id)));
+      const invalid = [...new Set(numeric.filter((id) => !validSet.has(id)))];
+      resolve({ badFormat: false, invalid });
+    });
+  });
+}
+
+// BE-9: returns an error response and true if assignee_ids are invalid, else false.
+// `alreadyAssignedIds` (the task's current assignees) are exempt from the active-user
+// check, so a previously-assigned member who was later deactivated does not block an
+// Admin/PM from editing the task — only genuinely NEW assignees must be active users.
+async function rejectInvalidAssignees(res, assignee_ids, errorCode, alreadyAssignedIds = []) {
+  if (assignee_ids === undefined) return false;
+  if (!Array.isArray(assignee_ids)) {
+    validationError(res, [{ field: 'assignee_ids', message: 'assignee_ids must be an array' }]);
+    return true;
+  }
+
+  const already = new Set((alreadyAssignedIds || []).map(Number));
+  const newIds = assignee_ids.map(Number).filter((id) => !already.has(id));
+  if (!newIds.length) return false;
+
+  let check;
+  try {
+    check = await checkAssignees(newIds);
+  } catch (err) {
+    errorResponse(res, 500, errorCode, 'Failed to validate assignees', err.message);
+    return true;
+  }
+  if (check.badFormat) {
+    validationError(res, [{ field: 'assignee_ids', message: 'assignee_ids must be positive integers' }]);
+    return true;
+  }
+  if (check.invalid.length) {
+    validationError(res, [
+      { field: 'assignee_ids', message: `Unknown or inactive assignees: ${check.invalid.join(', ')}` },
+    ]);
+    return true;
+  }
+  return false;
 }
 
 const TaskController = {
@@ -99,29 +155,32 @@ const TaskController = {
     const { title, description, project_id, due_date, priority, status, assignee_ids } = req.body;
 
     if (!title) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Title is required');
+      return validationError(res, [{ field: 'title', message: 'Title is required' }]);
     }
 
     if (!project_id) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Project is required');
+      return validationError(res, [{ field: 'project_id', message: 'Project is required' }]);
     }
 
     if (priority && !VALID_PRIORITIES.includes(priority)) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Invalid priority value');
+      return validationError(res, [{ field: 'priority', message: 'Invalid priority value' }]);
     }
 
     if (status && !VALID_STATUSES.includes(status)) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Invalid status value');
+      return validationError(res, [{ field: 'status', message: 'Invalid status value' }]);
     }
 
     const dueDateError = validateDueDate(due_date);
     if (dueDateError) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', dueDateError);
+      return validationError(res, [{ field: 'due_date', message: dueDateError }]);
     }
 
+    // BE-9: reject unknown/inactive assignees up front (no task is created).
+    if (await rejectInvalidAssignees(res, assignee_ids, 'TASK_CREATE_ERROR')) return;
+
     const taskData = {
-      title,
-      description,
+      title: sanitizeText(title), // BE-6
+      description: sanitizeText(description), // BE-6
       project_id,
       due_date,
       priority: priority || 'Medium',
@@ -192,7 +251,7 @@ const TaskController = {
         }
 
         if (!status || !VALID_STATUSES.includes(status)) {
-          return errorResponse(res, 400, 'VALIDATION_ERROR', 'Valid status is required');
+          return validationError(res, [{ field: 'status', message: 'Valid status is required' }]);
         }
 
         TaskModel.updateTaskStatus(id, status, async (updateErr, result) => {
@@ -223,25 +282,30 @@ const TaskController = {
       }
 
       if (!title) {
-        return errorResponse(res, 400, 'VALIDATION_ERROR', 'Title is required');
+        return validationError(res, [{ field: 'title', message: 'Title is required' }]);
       }
 
       if (priority && !VALID_PRIORITIES.includes(priority)) {
-        return errorResponse(res, 400, 'VALIDATION_ERROR', 'Invalid priority value');
+        return validationError(res, [{ field: 'priority', message: 'Invalid priority value' }]);
       }
 
       if (status && !VALID_STATUSES.includes(status)) {
-        return errorResponse(res, 400, 'VALIDATION_ERROR', 'Invalid status value');
+        return validationError(res, [{ field: 'status', message: 'Invalid status value' }]);
       }
 
       const dueDateError = validateDueDate(due_date);
       if (dueDateError) {
-        return errorResponse(res, 400, 'VALIDATION_ERROR', dueDateError);
+        return validationError(res, [{ field: 'due_date', message: dueDateError }]);
       }
 
+      // BE-9: validate only newly-added assignees (existing ones may have since been
+      // deactivated and are re-submitted by the UI — they must not block the update).
+      const previousAssigneeIds = await getAssigneeIdsAsync(id);
+      if (await rejectInvalidAssignees(res, assignee_ids, 'TASK_UPDATE_ERROR', previousAssigneeIds)) return;
+
       const taskData = {
-        title,
-        description,
+        title: sanitizeText(title), // BE-6
+        description: sanitizeText(description), // BE-6
         due_date,
         priority: priority || existing.priority,
         status: status || existing.status,
@@ -257,7 +321,6 @@ const TaskController = {
 
         try {
           if (Array.isArray(assignee_ids)) {
-            const previousAssigneeIds = await getAssigneeIdsAsync(id);
             await syncAssignments(id, assignee_ids);
 
             const newlyAssigned = recipientsExcept(

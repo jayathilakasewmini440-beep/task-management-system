@@ -1,15 +1,26 @@
 const db = require('../config/db');
-
-const errorResponse = (res, statusCode, errorCode, message, description = null) => {
-  return res.status(statusCode).json({ errorCode, message, description });
-};
+const { canAccessTask } = require('../utils/taskAccess');
+const { errorResponse, validationError } = require('../utils/errors');
 
 const AttachmentController = {
-  getAttachmentsByTask: (req, res) => {
+  getAttachmentsByTask: async (req, res) => {
     const { task_id } = req.params;
 
     if (!task_id || Number.isNaN(Number(task_id))) {
       return errorResponse(res, 400, 'INVALID_TASK_ID', 'Invalid task ID', 'Task ID must be a valid number');
+    }
+
+    // RC-1 (BE-5): a Collaborator may only list attachments on tasks they own/are assigned to.
+    try {
+      const access = await canAccessTask(task_id, req.user);
+      if (!access.found) {
+        return errorResponse(res, 404, 'NOT_FOUND', 'Task not found', `No task found with ID ${task_id}`);
+      }
+      if (!access.allowed) {
+        return errorResponse(res, 403, 'FORBIDDEN', 'You do not have access to this task', 'Attachments are visible only to assigned members');
+      }
+    } catch (accessErr) {
+      return errorResponse(res, 500, 'FETCH_ERROR', 'Failed to verify task access', accessErr.message);
     }
 
     const sql = `SELECT attachments.id, attachments.task_id, attachments.uploaded_by,
@@ -29,17 +40,30 @@ const AttachmentController = {
     });
   },
 
-  uploadAttachment: (req, res) => {
+  uploadAttachment: async (req, res) => {
     const taskId = Number(req.body.task_id);
     const uploadedBy = req.user.id;
     const file = req.file;
 
     if (!taskId || Number.isNaN(taskId)) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Invalid task ID', 'task_id is required');
+      return validationError(res, [{ field: 'task_id', message: 'A valid task_id is required' }]);
     }
 
     if (!file) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'No file uploaded', 'A file is required');
+      return validationError(res, [{ field: 'file', message: 'A file is required' }]);
+    }
+
+    // RC-1 (BE-5, write side): a Collaborator may only attach files to tasks they own/are assigned to.
+    try {
+      const access = await canAccessTask(taskId, req.user);
+      if (!access.found) {
+        return errorResponse(res, 404, 'NOT_FOUND', 'Task not found', `No task found with ID ${taskId}`);
+      }
+      if (!access.allowed) {
+        return errorResponse(res, 403, 'FORBIDDEN', 'You can only attach files to tasks assigned to you');
+      }
+    } catch (accessErr) {
+      return errorResponse(res, 500, 'CREATE_ERROR', 'Failed to verify task access', accessErr.message);
     }
 
     const fileName = file.originalname;
@@ -79,9 +103,9 @@ const AttachmentController = {
       return errorResponse(res, 400, 'INVALID_ID', 'Invalid attachment ID', 'Attachment ID must be a valid number');
     }
 
-    const sql = `SELECT file_name, file_mime, file_data FROM attachments WHERE id = ?`;
+    const sql = `SELECT task_id, file_name, file_mime, file_data FROM attachments WHERE id = ?`;
 
-    db.query(sql, [id], (err, results) => {
+    db.query(sql, [id], async (err, results) => {
       if (err) {
         return errorResponse(res, 500, 'FETCH_ERROR', 'Failed to get attachment', err.message);
       }
@@ -90,27 +114,52 @@ const AttachmentController = {
         return errorResponse(res, 404, 'NOT_FOUND', 'Attachment not found', `No file found with ID ${id}`);
       }
 
-      const { file_name: fileName, file_mime: fileMime, file_data: fileData } = results[0];
+      // RC-1 (BE-5): close the download IDOR — authorize against the owning task,
+      // not just the caller's role, before streaming the bytes.
+      try {
+        const access = await canAccessTask(results[0].task_id, req.user);
+        if (!access.allowed) {
+          return errorResponse(res, 403, 'FORBIDDEN', 'You do not have access to this attachment');
+        }
+      } catch (accessErr) {
+        return errorResponse(res, 500, 'FETCH_ERROR', 'Failed to verify attachment access', accessErr.message);
+      }
+
+      const { file_name: fileName, file_data: fileData } = results[0];
       const safeName = fileName.replace(/[^\w.\-() ]+/g, '_');
 
-      res.setHeader('Content-Type', fileMime || 'application/octet-stream');
+      // BE-12: never serve a stored file with its original (possibly executable)
+      // MIME type. Force a generic download type and stop content-type sniffing.
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
       res.send(fileData);
     });
   },
 
-  addAttachment: (req, res) => {
+  addAttachment: async (req, res) => {
     const { task_id, file_name, file_url } = req.body;
     const uploaded_by = req.user.id;
 
     if (!task_id || !file_name || !file_url) {
-      return errorResponse(
-        res,
-        400,
-        'VALIDATION_ERROR',
-        'Missing required fields',
-        'task_id, file_name and file_url are required'
-      );
+      const errors = [];
+      if (!task_id) errors.push({ field: 'task_id', message: 'task_id is required' });
+      if (!file_name) errors.push({ field: 'file_name', message: 'file_name is required' });
+      if (!file_url) errors.push({ field: 'file_url', message: 'file_url is required' });
+      return validationError(res, errors, 'Missing required fields');
+    }
+
+    // RC-1 (BE-5, write side): only members of the owning task may attach files.
+    try {
+      const access = await canAccessTask(task_id, req.user);
+      if (!access.found) {
+        return errorResponse(res, 404, 'NOT_FOUND', 'Task not found', `No task found with ID ${task_id}`);
+      }
+      if (!access.allowed) {
+        return errorResponse(res, 403, 'FORBIDDEN', 'You can only attach files to tasks assigned to you');
+      }
+    } catch (accessErr) {
+      return errorResponse(res, 500, 'CREATE_ERROR', 'Failed to verify task access', accessErr.message);
     }
 
     const sql = `INSERT INTO attachments (task_id, uploaded_by, file_name, file_url)

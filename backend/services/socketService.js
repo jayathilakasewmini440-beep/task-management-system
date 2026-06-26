@@ -3,12 +3,24 @@ const jwt = require('jsonwebtoken');
 const socketService = {
   io: null,
 
-  init(server) {
+  init(server, options = {}) {
+    const allowedOrigins = options.allowedOrigins || [];
     const { Server } = require('socket.io');
+
+    // DO-1: mirror the REST CORS allowlist instead of a wildcard on this authed
+    // channel. No-origin (native clients) is allowed; localhost only outside prod.
     this.io = new Server(server, {
       cors: {
-        origin: '*',
+        origin(origin, callback) {
+          if (!origin) return callback(null, true);
+          if (allowedOrigins.includes(origin)) return callback(null, true);
+          if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost:\d+$/.test(origin)) {
+            return callback(null, true);
+          }
+          return callback(new Error(`Socket CORS blocked for origin: ${origin}`));
+        },
         methods: ['GET', 'POST'],
+        credentials: true,
       },
     });
 

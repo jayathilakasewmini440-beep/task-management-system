@@ -52,7 +52,15 @@ const TaskModel = {
     const allowedSortFields = ['due_date', 'priority', 'status', 'created_at', 'title'];
     const sortBy = allowedSortFields.includes(filters.sortBy) ? filters.sortBy : 'created_at';
     const sortOrder = filters.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    sql += ` ORDER BY tasks.${sortBy} ${sortOrder}`;
+    // FE-4: priority/status are stored as text; order them by semantic rank rather
+    // than alphabetically so "Priority ↓" really means High → Medium → Low.
+    if (sortBy === 'priority') {
+      sql += ` ORDER BY CASE tasks.priority WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 1 ELSE 0 END ${sortOrder}`;
+    } else if (sortBy === 'status') {
+      sql += ` ORDER BY CASE tasks.status WHEN 'To Do' THEN 1 WHEN 'In Progress' THEN 2 WHEN 'Completed' THEN 3 ELSE 0 END ${sortOrder}`;
+    } else {
+      sql += ` ORDER BY tasks.${sortBy} ${sortOrder}`;
+    }
 
     db.query(sql, values, callback);
   },
@@ -143,6 +151,15 @@ const TaskModel = {
   getAssigneeIds: (taskId, callback) => {
     const sql = `SELECT user_id FROM task_assignments WHERE task_id = ?`;
     db.query(sql, [taskId], callback);
+  },
+
+  // BE-9: return the subset of the given ids that are existing, active users.
+  // The caller compares against the requested ids to reject unknown assignees.
+  findActiveUserIds: (ids, callback) => {
+    if (!Array.isArray(ids) || ids.length === 0) return callback(null, []);
+    const placeholders = ids.map(() => '?').join(', ');
+    const sql = `SELECT id FROM users WHERE is_active = TRUE AND id IN (${placeholders})`;
+    db.query(sql, ids, callback);
   },
 };
 

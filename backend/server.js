@@ -1,8 +1,16 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
+// BE-8: fail fast. Without JWT_SECRET, jwt.verify throws on every request and
+// tokens cannot be trusted — refuse to start rather than run in a broken state.
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET is not set. Set it in the environment before starting the server.');
+  process.exit(1);
+}
+
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const http = require('http');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
@@ -10,6 +18,7 @@ const db = require('./config/db');
 const { hasDatabaseConfig } = require('./config/dbConfig');
 const socketService = require('./services/socketService');
 const { notifyUsers } = require('./services/notificationService');
+const { globalLimiter } = require('./middleware/rateLimiters');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const taskRoutes = require('./routes/taskRoutes');
@@ -27,20 +36,41 @@ const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
 const app = express();
 const server = http.createServer(app);
 
-socketService.init(server);
+// Trust the first proxy hop (Render/most PaaS) so express-rate-limit keys on the
+// real client IP from X-Forwarded-For rather than the proxy's address.
+app.set('trust proxy', 1);
+
+socketService.init(server, { allowedOrigins });
+
+// BE-7: security headers. CSP is disabled because this is a JSON API and Swagger
+// UI (/api-docs) needs inline assets; the remaining helmet headers (HSTS,
+// nosniff, frameguard, etc.) still apply. CORP is set to cross-origin so the
+// separate frontend origin can consume the API.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
+      // BE-17: only allow ad-hoc localhost origins outside production.
+      if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost:\d+$/.test(origin)) {
+        return callback(null, true);
+      }
       return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
   })
 );
 app.use(express.json());
+
+// BE-2: global rate limit on all routes (login gets a stricter limiter in authRoutes).
+app.use(globalLimiter);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -122,7 +152,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({
     errorCode: 'INTERNAL_ERROR',
     message: 'Internal server error',
-    description: err.message,
+    // BE-10: don't leak internals in production.
+    description: process.env.NODE_ENV === 'production' ? null : err.message,
   });
 });
 
@@ -182,10 +213,6 @@ async function connectDatabaseWithRetry(attempts = 5) {
 }
 
 async function startServer() {
-  if (!process.env.JWT_SECRET) {
-    console.warn('Warning: JWT_SECRET is not set');
-  }
-
   try {
     if (hasDatabaseConfig()) {
       await connectDatabaseWithRetry();

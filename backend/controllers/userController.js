@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const { sendWelcomeEmail, isEmailConfigured } = require('../utils/sendEmail');
 const { createNotification } = require('../services/notificationService');
-const { PASSWORD_REGEX } = require('../utils/errors');
+const { PASSWORD_REGEX, internalError, validationError } = require('../utils/errors');
 const generateTempPassword = require('../utils/generateTempPassword');
 
 function isValidEmail(email) {
@@ -25,33 +25,25 @@ exports.createUser = async (req, res) => {
     const { email, role } = req.body;
 
     if (!full_name || !email || !role) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Full name, email, and role are required',
-      });
+      const errors = [];
+      if (!full_name) errors.push({ field: 'full_name', message: 'Full name is required' });
+      if (!email) errors.push({ field: 'email', message: 'Email is required' });
+      if (!role) errors.push({ field: 'role', message: 'Role is required' });
+      return validationError(res, errors, 'Full name, email, and role are required');
     }
 
     if (!isValidEmail(email)) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Email must be valid',
-      });
+      return validationError(res, [{ field: 'email', message: 'Email must be valid' }]);
     }
 
     const validRoles = ['Admin', 'Project Manager', 'Collaborator'];
     if (!validRoles.includes(role)) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Invalid role',
-      });
+      return validationError(res, [{ field: 'role', message: 'Invalid role' }]);
     }
 
     const roleId = await getRoleId(role);
     if (!roleId) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Role not found in database',
-      });
+      return validationError(res, [{ field: 'role', message: 'Role not found in database' }]);
     }
 
     if (!isEmailConfigured()) {
@@ -102,9 +94,9 @@ exports.createUser = async (req, res) => {
 
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY' || err.code === '23505') {
-      return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Email already exists' });
+      return validationError(res, [{ field: 'email', message: 'Email already exists' }]);
     }
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err, 'Failed to create user');
   }
 };
 
@@ -117,9 +109,17 @@ exports.getTeamMembers = async (req, res) => {
        WHERE u.is_active = TRUE
        ORDER BY u.full_name`
     );
-    res.json({ success: true, data: results });
+
+    // BE-43: the user directory exposes emails only to Admin/PM. Collaborators
+    // still get names + roles (for display), but not contact emails.
+    const data =
+      req.user.role === 'Collaborator'
+        ? results.map(({ email, ...rest }) => rest)
+        : results;
+
+    res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err);
   }
 };
 
@@ -133,7 +133,7 @@ exports.getUsers = async (req, res) => {
     );
     res.json({ success: true, data: results });
   } catch (err) {
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err);
   }
 };
 
@@ -144,25 +144,25 @@ exports.updateUser = async (req, res) => {
     const { email, role } = req.body;
 
     if (!full_name || !email || !role) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Full name, email, and role are required',
-      });
+      const errors = [];
+      if (!full_name) errors.push({ field: 'full_name', message: 'Full name is required' });
+      if (!email) errors.push({ field: 'email', message: 'Email is required' });
+      if (!role) errors.push({ field: 'role', message: 'Role is required' });
+      return validationError(res, errors, 'Full name, email, and role are required');
     }
 
     if (!isValidEmail(email)) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Email must be valid',
-      });
+      return validationError(res, [{ field: 'email', message: 'Email must be valid' }]);
+    }
+
+    const validRoles = ['Admin', 'Project Manager', 'Collaborator'];
+    if (!validRoles.includes(role)) {
+      return validationError(res, [{ field: 'role', message: 'Invalid role' }]);
     }
 
     const roleId = await getRoleId(role);
     if (!roleId) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Invalid role',
-      });
+      return validationError(res, [{ field: 'role', message: 'Invalid role' }]);
     }
 
     const [result] = await db.promise().query(
@@ -174,9 +174,16 @@ exports.updateUser = async (req, res) => {
       return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
     }
 
+    // BE-16: notify the affected user of the administrative change (covers role change).
+    try {
+      await createNotification(id, 'Account updated', 'Your account was updated by an administrator.', 'admin_update');
+    } catch (notifyErr) {
+      console.error('admin_update notification failed:', notifyErr.message);
+    }
+
     res.json({ message: 'User updated successfully' });
   } catch (err) {
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err);
   }
 };
 
@@ -189,9 +196,16 @@ exports.deactivateUser = async (req, res) => {
       return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
     }
 
+    // BE-16: emit an admin_update so the change surfaces in real time.
+    try {
+      await createNotification(id, 'Account deactivated', 'Your account has been deactivated by an administrator.', 'admin_update');
+    } catch (notifyErr) {
+      console.error('admin_update notification failed:', notifyErr.message);
+    }
+
     res.json({ message: 'User deactivated successfully' });
   } catch (err) {
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err);
   }
 };
 
@@ -204,9 +218,16 @@ exports.activateUser = async (req, res) => {
       return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
     }
 
+    // BE-16: emit an admin_update so the reactivation surfaces in real time.
+    try {
+      await createNotification(id, 'Account reactivated', 'Your account has been reactivated.', 'admin_update');
+    } catch (notifyErr) {
+      console.error('admin_update notification failed:', notifyErr.message);
+    }
+
     res.json({ message: 'User activated successfully' });
   } catch (err) {
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err);
   }
 };
 
@@ -237,7 +258,7 @@ exports.getMyProfile = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err);
   }
 };
 
@@ -246,24 +267,22 @@ exports.changeMyPassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'Current password and new password are required',
-      });
+      const errors = [];
+      if (!currentPassword) errors.push({ field: 'currentPassword', message: 'Current password is required' });
+      if (!newPassword) errors.push({ field: 'newPassword', message: 'New password is required' });
+      return validationError(res, errors, 'Current password and new password are required');
     }
 
     if (!PASSWORD_REGEX.test(newPassword)) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'New password must be at least 8 characters and include upper, lower, and a number',
-      });
+      return validationError(res, [
+        { field: 'newPassword', message: 'New password must be at least 8 characters and include upper, lower, a number, and a symbol' },
+      ]);
     }
 
     if (currentPassword === newPassword) {
-      return res.status(400).json({
-        errorCode: 'VALIDATION_ERROR',
-        message: 'New password must be different from your current password',
-      });
+      return validationError(res, [
+        { field: 'newPassword', message: 'New password must be different from your current password' },
+      ]);
     }
 
     const [rows] = await db.promise().query(
@@ -291,6 +310,6 @@ exports.changeMyPassword = async (req, res) => {
 
     res.json({ success: true, message: 'Password updated successfully' });
   } catch (err) {
-    res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
+    return internalError(res, err);
   }
 };

@@ -1,12 +1,32 @@
 const CommentModel = require('../models/commentModel');
 const TaskModel = require('../models/taskModel');
-const { errorResponse } = require('../utils/errors');
+const { errorResponse, validationError } = require('../utils/errors');
+const { canAccessTask } = require('../utils/taskAccess');
+const { sanitizeText } = require('../utils/sanitize');
 const { notifyUsers } = require('../services/notificationService');
 const { emitTaskUpdated } = require('../services/socketService');
 
 const CommentController = {
-  getCommentsByTask: (req, res) => {
+  getCommentsByTask: async (req, res) => {
     const { task_id } = req.params;
+
+    if (!task_id || Number.isNaN(Number(task_id))) {
+      return errorResponse(res, 400, 'INVALID_TASK_ID', 'Invalid task ID');
+    }
+
+    // RC-1: a Collaborator may only read comments on tasks they own/are assigned to.
+    try {
+      const access = await canAccessTask(task_id, req.user);
+      if (!access.found) {
+        return errorResponse(res, 404, 'TASK_NOT_FOUND', 'Task not found');
+      }
+      if (!access.allowed) {
+        return errorResponse(res, 403, 'FORBIDDEN', 'You can only view comments on tasks assigned to you');
+      }
+    } catch (accessErr) {
+      return errorResponse(res, 500, 'COMMENT_FETCH_ERROR', 'Failed to verify task access', accessErr.message);
+    }
+
     CommentModel.getCommentsByTask(task_id, (err, results) => {
       if (err) {
         return errorResponse(res, 500, 'COMMENT_FETCH_ERROR', 'Failed to get comments', err.message);
@@ -15,21 +35,34 @@ const CommentController = {
     });
   },
 
-  addComment: (req, res) => {
+  addComment: async (req, res) => {
     const { task_id, content } = req.body;
 
     if (!content || !content.trim()) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Comment content is required');
+      return validationError(res, [{ field: 'content', message: 'Comment content is required' }]);
     }
 
     if (!task_id) {
-      return errorResponse(res, 400, 'VALIDATION_ERROR', 'Task ID is required');
+      return validationError(res, [{ field: 'task_id', message: 'Task ID is required' }]);
+    }
+
+    // RC-1: a Collaborator may only comment on tasks they own/are assigned to.
+    try {
+      const access = await canAccessTask(task_id, req.user);
+      if (!access.found) {
+        return errorResponse(res, 404, 'TASK_NOT_FOUND', 'Task not found');
+      }
+      if (!access.allowed) {
+        return errorResponse(res, 403, 'FORBIDDEN', 'You can only comment on tasks assigned to you');
+      }
+    } catch (accessErr) {
+      return errorResponse(res, 500, 'COMMENT_CREATE_ERROR', 'Failed to verify task access', accessErr.message);
     }
 
     const commentData = {
       task_id,
       user_id: req.user.id,
-      content: content.trim(),
+      content: sanitizeText(content), // BE-6: strip markup from stored rich-text
     };
 
     CommentModel.addComment(commentData, async (err, result) => {
