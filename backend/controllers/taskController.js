@@ -12,6 +12,9 @@ function validateDueDate(dueDate) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) {
+    return 'Due date is invalid'; // BE-13: reject malformed dates ("garbage")
+  }
   if (due < today) {
     return 'Due date cannot be in the past';
   }

@@ -148,7 +148,7 @@ exports.resetPassword = async (req, res) => {
 
     if (!newPassword || !PASSWORD_REGEX.test(newPassword)) {
       return validationError(res, [
-        { field: 'newPassword', message: 'Password must be at least 8 characters and include upper, lower, and a number' },
+        { field: 'newPassword', message: 'Password must be at least 8 characters and include upper, lower, a number, and a symbol' },
       ]);
     }
 

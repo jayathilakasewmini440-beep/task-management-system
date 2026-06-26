@@ -174,6 +174,13 @@ exports.updateUser = async (req, res) => {
       return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
     }
 
+    // BE-16: notify the affected user of the administrative change (covers role change).
+    try {
+      await createNotification(id, 'Account updated', 'Your account was updated by an administrator.', 'admin_update');
+    } catch (notifyErr) {
+      console.error('admin_update notification failed:', notifyErr.message);
+    }
+
     res.json({ message: 'User updated successfully' });
   } catch (err) {
     return internalError(res, err);
@@ -189,6 +196,13 @@ exports.deactivateUser = async (req, res) => {
       return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
     }
 
+    // BE-16: emit an admin_update so the change surfaces in real time.
+    try {
+      await createNotification(id, 'Account deactivated', 'Your account has been deactivated by an administrator.', 'admin_update');
+    } catch (notifyErr) {
+      console.error('admin_update notification failed:', notifyErr.message);
+    }
+
     res.json({ message: 'User deactivated successfully' });
   } catch (err) {
     return internalError(res, err);
@@ -202,6 +216,13 @@ exports.activateUser = async (req, res) => {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'User not found' });
+    }
+
+    // BE-16: emit an admin_update so the reactivation surfaces in real time.
+    try {
+      await createNotification(id, 'Account reactivated', 'Your account has been reactivated.', 'admin_update');
+    } catch (notifyErr) {
+      console.error('admin_update notification failed:', notifyErr.message);
     }
 
     res.json({ message: 'User activated successfully' });
@@ -254,7 +275,7 @@ exports.changeMyPassword = async (req, res) => {
 
     if (!PASSWORD_REGEX.test(newPassword)) {
       return validationError(res, [
-        { field: 'newPassword', message: 'New password must be at least 8 characters and include upper, lower, and a number' },
+        { field: 'newPassword', message: 'New password must be at least 8 characters and include upper, lower, a number, and a symbol' },
       ]);
     }
 

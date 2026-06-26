@@ -69,9 +69,10 @@ model Project {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  creator User            @relation("ProjectCreator", fields: [createdBy], references: [id])
-  members ProjectMember[]
-  tasks   Task[]
+  creator       User            @relation("ProjectCreator", fields: [createdBy], references: [id])
+  members       ProjectMember[]
+  tasks         Task[]
+  notifications Notification[]
 
   @@index([createdBy], map: "idx_projects_created_by")
   @@index([status], map: "idx_projects_status")
@@ -106,11 +107,12 @@ model Task {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  creator     User             @relation("TaskCreator", fields: [createdBy], references: [id])
-  assignments TaskAssignment[]
-  comments    Comment[]
-  attachments Attachment[]
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator       User             @relation("TaskCreator", fields: [createdBy], references: [id])
+  assignments   TaskAssignment[]
+  comments      Comment[]
+  attachments   Attachment[]
+  notifications Notification[]
 
   @@index([projectId], map: "idx_tasks_project")
   @@index([status], map: "idx_tasks_status")
@@ -182,12 +184,17 @@ model Notification {
   isRead    Boolean  @default(false) @map("is_read")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // BE-19: link notifications to their task/project; null the link if the target is deleted.
+  task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([userId], map: "idx_notif_user")
   @@index([isRead], map: "idx_notif_is_read")
   @@index([type], map: "idx_notif_type")
   @@index([userId, isRead], map: "idx_notif_user_unread")
+  @@index([taskId], map: "idx_notif_task")
+  @@index([projectId], map: "idx_notif_project")
   @@index([createdAt], map: "idx_notif_created")
   @@map("notifications")
 }

@@ -76,7 +76,16 @@ router.post(
  *     security:
  *       - bearerAuth: []
  */
-router.put('/:id', verifyToken, blockIfMustResetPassword, TaskController.updateTask);
+// BE-44: explicit route-level allow-list. All three roles may call update (the
+// controller restricts Collaborators to status-only); this just rejects unknown
+// roles at the route rather than relying solely on controller logic.
+router.put(
+  '/:id',
+  verifyToken,
+  blockIfMustResetPassword,
+  requireRole('Admin', 'Project Manager', 'Collaborator'),
+  TaskController.updateTask
+);
 
 /**
  * @swagger

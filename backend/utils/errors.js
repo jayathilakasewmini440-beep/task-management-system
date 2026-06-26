@@ -44,5 +44,6 @@ module.exports = {
   errorResponse,
   internalError,
   validationError,
-  PASSWORD_REGEX: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
+  // BE-14: require lower, upper, digit, AND a symbol, min length 8.
+  PASSWORD_REGEX: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/,
 };

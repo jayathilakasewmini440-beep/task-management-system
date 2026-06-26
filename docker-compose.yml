@@ -5,8 +5,24 @@ services:
     build: ./backend
     ports:
       - "5000:5000"
+    # DO-3: default DB_* to the bundled postgres service and supply a dev
+    # JWT_SECRET so a fresh clone runs `docker compose up` with no hand-made
+    # .env. Real secrets (Resend, prod JWT secret) can still be supplied via the
+    # optional ./backend/.env below.
+    environment:
+      NODE_ENV: development
+      PORT: "5000"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: tms_db
+      DB_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      CLIENT_ORIGIN: http://localhost:5173
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
