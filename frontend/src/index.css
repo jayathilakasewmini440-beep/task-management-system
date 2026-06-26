@@ -1651,6 +1651,9 @@ textarea:focus,
 }
 
 .select-pill {
+  /* override the global `select { width: 100% }` so pills size to content and sit
+     inline (otherwise flex-wrap stacks each full-width select on its own row) */
+  width: auto;
   min-width: 130px;
   padding: 8px 12px;
   font-size: 0.85rem;
@@ -1678,6 +1681,39 @@ textarea:focus,
 
 .data-table__sortable:hover {
   color: var(--text);
+}
+
+/* Horizontal filter controls above the Kanban board */
+.task-filters {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-filters .select-pill {
+  flex: 0 0 auto;
+  min-width: 144px;
+}
+
+.task-filters__clear {
+  margin-left: auto;
+}
+
+/* Per-column filter row inside the task table header */
+.data-table__filter-row th {
+  position: static;
+  background: var(--surface);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.select-pill--table {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 0.8rem;
 }
 
 .search-input {

@@ -4,7 +4,9 @@ import { api } from '../api';
 import { useAuth, useRole } from '../context/AuthContext';
 import KanbanBoard from '../components/KanbanBoard';
 import TaskTableView from '../components/TaskTableView';
+import TaskFilterBar from '../components/TaskFilterBar';
 import TaskModal from '../components/TaskModal';
+import { useTaskFilters } from '../hooks/useTaskFilters';
 
 export default function AllTasks() {
   const { mustResetPassword } = useAuth();
@@ -17,8 +19,6 @@ export default function AllTasks() {
   const [error, setError] = useState('');
   const [selectedTask, setSelectedTask] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [search, setSearch] = useState('');
-  const [projectFilter, setProjectFilter] = useState('all');
 
   const viewMode = searchParams.get('view') || 'board';
 
@@ -63,6 +63,15 @@ export default function AllTasks() {
     return map;
   }, [projects]);
 
+  // Attach project_name so the shared filter (search + project filter + table column) can use it.
+  const tasksWithProject = useMemo(
+    () => tasks.map((t) => ({ ...t, project_name: projectMap[t.project_id] })),
+    [tasks, projectMap]
+  );
+
+  const filters = useTaskFilters(tasksWithProject, { withProject: true });
+  const displayedTasks = filters.filtered;
+
   const handleStatusChange = async (task, status) => {
     try {
       if (canManageTasks) {
@@ -86,22 +95,6 @@ export default function AllTasks() {
     }
   };
 
-  const displayedTasks = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return tasks
-      .map((t) => ({ ...t, project_name: projectMap[t.project_id] }))
-      .filter(
-        (t) => projectFilter === 'all' || String(t.project_id) === String(projectFilter)
-      )
-      .filter(
-        (t) =>
-          !term ||
-          t.title?.toLowerCase().includes(term) ||
-          t.description?.toLowerCase().includes(term) ||
-          t.project_name?.toLowerCase().includes(term)
-      );
-  }, [tasks, projectMap, search, projectFilter]);
-
   if (mustResetPassword) {
     return <Navigate to="/reset-password" replace />;
   }
@@ -121,8 +114,8 @@ export default function AllTasks() {
           <input
             className="search-input search-input--header"
             placeholder="Search tasks…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={filters.search}
+            onChange={(e) => filters.setSearch(e.target.value)}
           />
           {canManageTasks && (
             <button type="button" className="btn btn--primary" onClick={() => setCreating(true)}>
@@ -151,19 +144,16 @@ export default function AllTasks() {
             Table
           </button>
         </div>
-        <select
-          className="select-pill"
-          value={projectFilter}
-          onChange={(e) => setProjectFilter(e.target.value)}
-          aria-label="Filter by project"
-        >
-          <option value="all">All projects</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.project_name || project.name}
-            </option>
-          ))}
-        </select>
+
+        {viewMode === 'board' ? (
+          <TaskFilterBar filters={filters} projects={projects} />
+        ) : (
+          filters.activeCount > 0 && (
+            <button type="button" className="btn btn--ghost btn--small task-filters__clear" onClick={filters.clear}>
+              Clear ({filters.activeCount})
+            </button>
+          )
+        )}
       </div>
 
       {loading ? (
@@ -176,14 +166,24 @@ export default function AllTasks() {
           ))}
         </div>
       ) : displayedTasks.length === 0 && !error ? (
-        <div className="empty-state">
-          <h3>No tasks to show</h3>
-          <p className="muted">
-            {canManageTasks
-              ? 'Create a task inside a project to see it here.'
-              : 'You have no assigned tasks yet.'}
-          </p>
-        </div>
+        filters.activeCount > 0 ? (
+          <div className="empty-state">
+            <h3>No tasks match your filters</h3>
+            <p className="muted">Try clearing the search or filters.</p>
+            <button type="button" className="btn btn--ghost" onClick={filters.clear}>
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <h3>No tasks to show</h3>
+            <p className="muted">
+              {canManageTasks
+                ? 'Create a task inside a project to see it here.'
+                : 'You have no assigned tasks yet.'}
+            </p>
+          </div>
+        )
       ) : viewMode === 'board' ? (
         <KanbanBoard
           tasks={displayedTasks}
@@ -197,6 +197,8 @@ export default function AllTasks() {
           onStatusChange={handleStatusChange}
           canManageTasks={canManageTasks}
           showProject
+          filters={filters}
+          projects={projects}
         />
       )}
 
