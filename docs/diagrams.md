@@ -2,8 +2,9 @@
 
 Design diagrams for the Task Management System (INTE 21323), covering the SRS
 *Deliverables* requirement: **ER diagram, Class diagram, DB design, and Deployment
-diagram**. All diagrams are authored in [Mermaid](https://mermaid.js.org/) so they
-render natively on GitHub — no image export required. Sources of truth:
+diagram**. Each section shows the **authored diagram** (image, with a high-resolution
+PDF where available) alongside a **text-based [Mermaid](https://mermaid.js.org/)
+version** that renders natively on GitHub. Sources of truth:
 [`backend/prisma/schema.prisma`](../backend/prisma/schema.prisma),
 [`supabase/migrations/`](../supabase/migrations), and [`render.yaml`](../render.yaml).
 
@@ -14,6 +15,12 @@ render natively on GitHub — no image export required. Sources of truth:
 Ten entities. `roles → users` is one-to-many; `project_members` and
 `task_assignments` are many-to-many join tables; `notifications` link optionally to
 a task and/or project.
+
+**Authored ER diagram** — high-resolution source: [er-diagram.pdf](diagrams/er-diagram.pdf)
+
+![ER Diagram](diagrams/er-diagram.png)
+
+A text-based (Mermaid) version of the same model, for quick reference on GitHub:
 
 ```mermaid
 erDiagram
@@ -259,6 +266,10 @@ foreign keys, unique constraints, `CHECK` constraints, and indexes. The applicat
 layer never concatenates SQL — all access is via parameterized queries / the Prisma
 schema (defense in depth).
 
+**Authored schema diagram** — high-resolution source: [database-design.pdf](diagrams/database-design.pdf)
+
+![Database Design](diagrams/database-design.png)
+
 ### Tables
 
 | Table | Primary Key | Foreign Keys (on delete) | Unique | Notable columns / constraints |
@@ -289,6 +300,12 @@ Cloud topology. The frontend is a static Render site that **rewrites** `/api/*` 
 `/socket.io/*` to the Render backend container, so the browser talks to a single
 origin (clean CORS, real-time over WSS). Backend runs as a Docker container; data
 lives in Supabase Postgres; transactional email goes through Resend.
+
+**Authored deployment diagram** (UML deployment view):
+
+![Deployment Diagram](diagrams/deployment-diagram.png)
+
+A text-based (Mermaid) version:
 
 ```mermaid
 flowchart TB
