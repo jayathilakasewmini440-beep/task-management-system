@@ -9,7 +9,7 @@ import UpcomingTasks from '../components/UpcomingTasks';
 import TeamWorkload from '../components/TeamWorkload';
 import RecentProjects from '../components/RecentProjects';
 import TaskModal from '../components/TaskModal';
-import { FolderIcon, TargetIcon, CheckIcon, ClipboardIcon } from '../components/Icons';
+import { FolderSolidIcon, ActiveSolidIcon, CheckCircleSolidIcon, ClipboardSolidIcon } from '../components/Icons';
 
 export default function Dashboard() {
   const { mustResetPassword, user } = useAuth();
@@ -89,10 +89,10 @@ export default function Dashboard() {
       {!loading && !error && (
         <>
           <div className="stats-row">
-            <StatCard label="Projects" value={projects.length} accent="indigo" icon={<FolderIcon size={22} />} />
-            <StatCard label="Tasks Completed" value={stats.done} accent="green" icon={<CheckIcon size={22} />} />
-            <StatCard label="Active Tasks" value={stats.inProgress} accent="blue" icon={<TargetIcon size={22} />} />
-            <StatCard label="Total Tasks" value={stats.total} accent="slate" icon={<ClipboardIcon size={22} />} />
+            <StatCard label="Projects" value={projects.length} accent="primary" icon={<FolderSolidIcon size={24} />} />
+            <StatCard label="Tasks Completed" value={stats.done} accent="green" icon={<CheckCircleSolidIcon size={24} />} />
+            <StatCard label="Active Tasks" value={stats.inProgress} accent="blue" icon={<ActiveSolidIcon size={24} />} />
+            <StatCard label="Total Tasks" value={stats.total} accent="amber" icon={<ClipboardSolidIcon size={24} />} />
           </div>
 
           <RecentProjects projects={projects} />

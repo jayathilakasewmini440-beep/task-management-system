@@ -1429,8 +1429,13 @@ textarea:focus,
   color: var(--text-muted);
 }
 
+.stat-card--primary .stat-card__icon { background: var(--primary-light); color: var(--primary); }
+.stat-card--blue .stat-card__icon {
+  background: color-mix(in srgb, var(--status-prog) 16%, var(--surface-soft));
+  color: var(--status-prog);
+}
+/* legacy neutral accents (kept for safety) */
 .stat-card--indigo .stat-card__icon,
-.stat-card--blue .stat-card__icon,
 .stat-card--slate .stat-card__icon { background: var(--surface-soft); }
 .stat-card--amber .stat-card__icon { background: var(--med-bg); color: var(--med); }
 .stat-card--green .stat-card__icon { background: var(--done-bg); color: var(--done); }
