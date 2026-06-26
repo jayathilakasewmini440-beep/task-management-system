@@ -117,7 +117,15 @@ exports.getTeamMembers = async (req, res) => {
        WHERE u.is_active = TRUE
        ORDER BY u.full_name`
     );
-    res.json({ success: true, data: results });
+
+    // BE-43: the user directory exposes emails only to Admin/PM. Collaborators
+    // still get names + roles (for display), but not contact emails.
+    const data =
+      req.user.role === 'Collaborator'
+        ? results.map(({ email, ...rest }) => rest)
+        : results;
+
+    res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ errorCode: 'INTERNAL_ERROR', message: err.message });
   }
